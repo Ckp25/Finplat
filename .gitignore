@@ -1,0 +1,26 @@
+# Virtual Environment
+venv/
+env/
+.env/
+.venv/
+ENV/
+
+# Compiled Python files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# Large data files (if you don't want to track them)
+data/raw/
+data/processed/
+
+# Logs
+logs/*.log
