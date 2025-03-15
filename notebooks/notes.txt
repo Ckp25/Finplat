@@ -1,0 +1,36 @@
+Feature                  Missing Values    Status
+SMA_20                        19           Dropped
+SMA_50                        49           Dropped  : For SMAs, created a new MA column to capture all of them and then SMAs are dropped.
+SMA_200                      199           Dropped
+RSI_14                        13           Filled NaNs with 50 
+ROC_10                        10           Filled NaNs with 0
+BB_Middle                     19           
+BB_Std                        19           Created Adaptive counterparts and dropped the raw columns.
+BB_Upper                      19
+BB_Lower                      19
+ATR_14                        13           Adaptive
+S&P500_Return                  1  }         Fill missing value with 0      
+S&P500_Correlation            30  }         Ffill
+S&P500_RelativeStrength        1  }         Recalculated from the formula
+Beta_S&P500                   60  }        Ffill
+NASDAQ_Return                  1           
+NASDAQ_Correlation            30
+NASDAQ_RelativeStrength        1
+Beta_NASDAQ                   60
+DowJones_Return                1
+DowJones_Correlation          30
+DowJones_RelativeStrength      1           All these values are handled similarly
+Beta_DowJones                 60
+Gold_Return                    1
+Gold_Correlation              30
+Gold_RelativeStrength          1
+Oil_Return                     1
+Oil_Correlation               30
+Oil_RelativeStrength           1
+VIX_Return                     1
+VIX_Correlation               30
+VIX_RelativeStrength           1
+Avg_Market_Correlation        30
+PEG_Ratio                    502             
+
+All these columns have null values, which have to be handled systematically.

@@ -35,3 +35,5 @@ tqdm  # For progress bars
 joblib  # For model serialization
 pytest  # For testing
 
+# Jupyter
+ipykernel
