@@ -34,3 +34,26 @@ Avg_Market_Correlation        30
 PEG_Ratio                    502             
 
 All these columns have null values, which have to be handled systematically.
+
+
+
+
+
+trend = ['EMA_12', 'EMA_26','MA', 'Adaptive_BB_Middle']
+
+momentum = ['RSI_14', 'MACD', 'MACD_Signal', 'MACD_Histogram', 'ROC_10']
+
+volatility = ['Adaptive_BB_Std', 'Adaptive_BB_Upper', 'Adaptive_BB_Lower', 'BB_Width', 'TR', 'Adaptive_ATR', 'Adaptive_ATR_Pct']
+
+price_returns = ['S&P500_Price', 'S&P500_Return','NASDAQ_Price', 'NASDAQ_Return', 'DowJones_Price', 'DowJones_Return','Gold_Price', 'Gold_Return',
+                 'Oil_Price', 'Oil_Return', 'VIX_Price', 'VIX_Return']
+
+correlation_beta = ['S&P500_Correlation', 'NASDAQ_Correlation', 'DowJones_Correlation', 'Gold_Correlation', 'Oil_Correlation', 'VIX_Correlation', 'Avg_Market_Correlation',
+                     'Beta_S&P500', 'Beta_NASDAQ', 'Beta_DowJones']
+
+relative = ['S&P500_RelativeStrength', 'NASDAQ_RelativeStrength', 'DowJones_RelativeStrength', 'Gold_RelativeStrength', 'Oil_RelativeStrength', 'VIX_RelativeStrength']
+
+fundamental_indicators = ['PE_Ratio', 'Forward_PE', 'PEG_Ratio', 'Price_to_Book', 'EPS', 'Profit_Margin', 'ROE', 'ROA', 'Debt_to_Equity', 
+                          'Current_Ratio', 'Quick_Ratio', 'Dividend_Yield', 'Fundamental_Score']
+
+sentiment = ['Sentiment_Score', 'News_Volume', 'Sentiment_Relevance', 'Weighted_Sentiment']

@@ -1,13 +1,34 @@
-import yfinance as yf
-import pandas as pd
-import numpy as np
+import requests
 import logging
+import numpy as np
+import pandas as pd
 from datetime import datetime
-import pytz
+
+def read_api_key(filepath=r"C:\Users\ckpra\OneDrive\Desktop\avapikey.txt"):
+    """
+    Read API key from a local text file
+    
+    Args:
+        filepath (str): Path to the text file containing the API key
+        
+    Returns:
+        str: The API key as a string
+    """
+    try:
+        with open(filepath, 'r') as file:
+            # Read the file and strip any whitespace
+            api_key = file.read().strip()
+        return api_key
+    except FileNotFoundError:
+        logging.error(f"API key file not found: {filepath}")
+        return None
+    except Exception as e:
+        logging.error(f"Error reading API key: {e}")
+        return None
 
 def add_fundamental_features(stock_data_dict):
     """
-    Add fundamental metrics to multiple stock DataFrames.
+    Add fundamental metrics using Alpha Vantage API
     
     Args:
         stock_data_dict (dict): Dictionary with ticker symbols as keys and DataFrames as values
@@ -15,107 +36,172 @@ def add_fundamental_features(stock_data_dict):
     Returns:
         dict: Dictionary with enhanced DataFrames including fundamental features
     """
+    api_key = read_api_key()
+    if not api_key:
+        logging.error("No API key available for Alpha Vantage")
+        return stock_data_dict
+        
     enhanced_data = {}
     
     for ticker, df in stock_data_dict.items():
         logging.info(f"Adding fundamental features for {ticker}")
+        
+        # Create a copy to avoid modifying the original
+        enhanced_df = df.copy()
+        
+        # Initialize fundamental columns
+        enhanced_df['PE_Ratio'] = np.nan
+        enhanced_df['EPS'] = np.nan
+        enhanced_df['ROE'] = np.nan
+        
         try:
-            # Create a copy to avoid modifying the original
-            enhanced_df = df.copy()
+            # 1. First, try to get quarterly earnings reports
+            url = f"https://www.alphavantage.co/query?function=EARNINGS&symbol={ticker}&apikey={api_key}"
+            response = requests.get(url)
             
-            # Initialize fundamental columns with static values
-            fundamental_metrics = {
-                'PE_Ratio': None, 
-                'Forward_PE': None, 
-                'PEG_Ratio': None, 
-                'Price_to_Book': None, 
-                'EPS': None, 
-                'Profit_Margin': None, 
-                'ROE': None, 
-                'ROA': None, 
-                'Debt_to_Equity': None,
-                'Current_Ratio': None, 
-                'Quick_Ratio': None, 
-                'Dividend_Yield': None,
-                'Fundamental_Score': 0
-            }
-            
-            # Add columns to dataframe
-            for metric, default_value in fundamental_metrics.items():
-                enhanced_df[metric] = default_value
+            if response.status_code != 200:
+                logging.error(f"Failed to get earnings data: Status code {response.status_code}")
+            else:
+                earnings_data = response.json()
                 
-            # Get the most recent fundamental data using yfinance
-            stock = yf.Ticker(ticker)
-            
-            try:
-                # Get current info from Yahoo Finance
-                ratios = stock.info
-                
-                if ratios:
-                    # Map yfinance info dictionary keys to our column names
-                    info_mapping = {
-                        'trailingPE': 'PE_Ratio',
-                        'forwardPE': 'Forward_PE',
-                        'pegRatio': 'PEG_Ratio',
-                        'priceToBook': 'Price_to_Book',
-                        'trailingEps': 'EPS',
-                        'profitMargins': 'Profit_Margin',
-                        'returnOnEquity': 'ROE',
-                        'returnOnAssets': 'ROA',
-                        'debtToEquity': 'Debt_to_Equity',
-                        'currentRatio': 'Current_Ratio',
-                        'quickRatio': 'Quick_Ratio',
-                        'dividendYield': 'Dividend_Yield'
-                    }
+                if "Information" in earnings_data and "limit" in earnings_data["Information"].lower():
+                    logging.warning(f"API limit reached: {earnings_data['Information']}")
+                elif "quarterlyEarnings" in earnings_data:
+                    quarterly_earnings = earnings_data["quarterlyEarnings"]
                     
-                    # Fill the most recent values for all dates
-                    for yf_key, df_column in info_mapping.items():
-                        if yf_key in ratios and ratios[yf_key] is not None:
-                            enhanced_df[df_column] = ratios[yf_key]
-            except Exception as e:
-                logging.warning(f"Error getting fundamental ratios for {ticker}: {e}")
-            
-            # Skip the quarterly data matching for now since it's causing timezone issues
-            # We'll just use the most recent values instead
-            
-            # Calculate a fundamental score - simple version
-            enhanced_df['Fundamental_Score'] = 0
-            
-            # Add to score for good values in positive metrics
-            for pos_metric in ['ROE', 'ROA', 'Current_Ratio', 'Quick_Ratio']:
-                if pos_metric in enhanced_df.columns:
-                    # For ROE and ROA, values above 0.1 (10%) are good
-                    if pos_metric in ['ROE', 'ROA']:
-                        good_mask = enhanced_df[pos_metric] > 0.1
-                    # For ratios, values above 1.5 are generally good
-                    else:
-                        good_mask = enhanced_df[pos_metric] > 1.5
+                    logging.info(f"Found {len(quarterly_earnings)} quarterly earnings reports for {ticker}")
+                    
+                    # Create a dict to store quarterly EPS values
+                    eps_data = {}
+                    
+                    for quarter in quarterly_earnings:
+                        fiscal_date = quarter.get("fiscalDateEnding")
+                        reported_eps = quarter.get("reportedEPS")
                         
-                    enhanced_df.loc[good_mask, 'Fundamental_Score'] += 1
-            
-            # Subtract from score for bad values in negative metrics
-            for neg_metric in ['Debt_to_Equity']:
-                if neg_metric in enhanced_df.columns:
-                    # High debt-to-equity is a negative
-                    high_debt_mask = enhanced_df[neg_metric] > 2.0
-                    enhanced_df.loc[high_debt_mask, 'Fundamental_Score'] -= 1
-            
-            # Add P/E ratio evaluation
-            if 'PE_Ratio' in enhanced_df.columns:
-                # Very high P/E could be a warning sign (overvalued)
-                high_pe_mask = enhanced_df['PE_Ratio'] > 50
-                enhanced_df.loc[high_pe_mask, 'Fundamental_Score'] -= 1
-                
-                # Reasonable P/E could be a good sign (fairly valued)
-                good_pe_mask = (enhanced_df['PE_Ratio'] > 10) & (enhanced_df['PE_Ratio'] < 25)
-                enhanced_df.loc[good_pe_mask, 'Fundamental_Score'] += 1
-            
-            # Store the enhanced dataframe
-            enhanced_data[ticker] = enhanced_df
-            
+                        if fiscal_date and reported_eps:
+                            try:
+                                # Convert to datetime and numeric EPS
+                                quarter_date = pd.to_datetime(fiscal_date)
+                                eps_value = float(reported_eps)
+                                
+                                # Store in our dict
+                                eps_data[quarter_date] = eps_value
+                            except (ValueError, TypeError) as e:
+                                logging.warning(f"Error parsing earnings data: {e}")
+                    
+                    if eps_data:
+                        # Convert to pandas Series and sort by date
+                        eps_series = pd.Series(eps_data)
+                        eps_series = eps_series.sort_index()
+
+                        # Check the timezone of the dataframe's index
+                        if enhanced_df.index.tz is not None:
+                        # If the dataframe has a timezone, localize the eps_series dates to match
+                            eps_series.index = eps_series.index.tz_localize(enhanced_df.index.tz)
+                        else:
+                        # If the dataframe doesn't have a timezone, ensure eps_series doesn't either
+                            if eps_series.index.tz is not None:
+                                eps_series.index = eps_series.index.tz_localize(None)
+
+                        
+                        # Forward fill to our daily dataframe
+                        enhanced_df['EPS'] = eps_series.reindex(enhanced_df.index, method='ffill')
+                        logging.info(f"Added EPS data for {ticker}")
+                        
+                        # 2. Get overview for more fundamental metrics
+                        url = f"https://www.alphavantage.co/query?function=OVERVIEW&symbol={ticker}&apikey={api_key}"
+                        response = requests.get(url)
+                        
+                        if response.status_code == 200:
+                            overview_data = response.json()
+                            
+                            # Check for PE ratio
+                            if "TrailingPE" in overview_data:
+                                try:
+                                    pe_ratio = float(overview_data["TrailingPE"])
+                                    # Create a time series of P/E ratio based on reported EPS and daily prices
+                                    enhanced_df['PE_Ratio'] = enhanced_df['Close'] / enhanced_df['EPS']
+                                    logging.info(f"Calculated P/E ratio from price and EPS for {ticker}")
+                                except (ValueError, TypeError) as e:
+                                    logging.warning(f"Error parsing P/E ratio: {e}")
+                            
+                            # Check for ROE
+                            if "ReturnOnEquityTTM" in overview_data:
+                                try:
+                                    roe = float(overview_data["ReturnOnEquityTTM"])
+                                    # For now, just use the current ROE value for all dates
+                                    # In a real implementation, you'd want to get historical ROE data
+                                    enhanced_df['ROE'] = roe
+                                    logging.info(f"Added ROE data for {ticker}")
+                                except (ValueError, TypeError) as e:
+                                    logging.warning(f"Error parsing ROE: {e}")
+                        
+                            # 3. Try to get quarterly balance sheet data for historical ROE calculation
+                            url = f"https://www.alphavantage.co/query?function=BALANCE_SHEET&symbol={ticker}&apikey={api_key}"
+                            response = requests.get(url)
+                            
+                            if response.status_code == 200:
+                                balance_sheet_data = response.json()
+                                
+                                if "quarterlyReports" in balance_sheet_data:
+                                    quarterly_reports = balance_sheet_data["quarterlyReports"]
+                                    
+                                    # Create dict to store quarterly total shareholder equity
+                                    equity_data = {}
+                                    
+                                    for report in quarterly_reports:
+                                        fiscal_date = report.get("fiscalDateEnding")
+                                        total_equity = report.get("totalShareholderEquity")
+                                        
+                                        if fiscal_date and total_equity:
+                                            try:
+                                                # Convert to datetime and numeric value
+                                                report_date = pd.to_datetime(fiscal_date)
+                                                equity_value = float(total_equity)
+                                                
+                                                # Store in our dict
+                                                equity_data[report_date] = equity_value
+                                            except (ValueError, TypeError) as e:
+                                                logging.warning(f"Error parsing balance sheet data: {e}")
+                                    
+                                    if equity_data:
+                                        # Convert to pandas Series and sort by date
+                                        equity_series = pd.Series(equity_data)
+                                        equity_series = equity_series.sort_index()
+
+                                        if enhanced_df.index.tz is not None:
+                                            equity_series.index = equity_series.index.tz_localize(enhanced_df.index.tz)
+                                        else:
+                                            if equity_series.index.tz is not None:
+                                                 equity_series.index = equity_series.index.tz_localize(None)
+                                        
+                                        # Calculate ROE for each quarter where we have both EPS and equity
+                                        roe_data = {}
+                                        
+                                        for date in eps_series.index:
+                                            if date in equity_series.index:
+                                                eps = eps_series[date]
+                                                equity = equity_series[date]
+                                                
+                                                if equity > 0:
+                                                    # Annualize quarterly EPS (multiply by 4) and divide by equity
+                                                    # per share (which is total equity / shares outstanding)
+                                                    # As a simplification, assume shares outstanding is constant
+                                                    roe_data[date] = (eps * 4) / (equity / 1e6)  # Rough approximation
+                                        
+                                        if roe_data:
+                                            # Convert to pandas Series and sort by date
+                                            roe_series = pd.Series(roe_data)
+                                            roe_series = roe_series.sort_index()
+                                            
+                                            # Forward fill to our daily dataframe
+                                            enhanced_df['ROE'] = roe_series.reindex(enhanced_df.index, method='ffill')
+                                            logging.info(f"Added calculated ROE data for {ticker}")
+                                    
         except Exception as e:
-            logging.error(f"Error processing fundamental data for {ticker}: {e}")
-            # If there's an error, return the original dataframe
-            enhanced_data[ticker] = df
+            logging.error(f"Error in fundamental analysis for {ticker}: {e}")
+        
+        # Store the enhanced dataframe
+        enhanced_data[ticker] = enhanced_df
     
     return enhanced_data
